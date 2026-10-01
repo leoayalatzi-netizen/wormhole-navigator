@@ -1,0 +1,87 @@
+  html, body { margin:0; padding:0; overflow:hidden; width:100%; height:100%; background:#020307; font-family:'Segoe UI',Arial,sans-serif; color:#e8e9f5; }
+  #renderCanvas { width:100%; height:100%; touch-action:none; display:block; }
+  #ui {
+    position:fixed; top:10px; left:10px; width:340px; max-height:93vh; overflow-y:auto;
+    background:linear-gradient(160deg, rgba(10,14,28,0.85), rgba(6,8,16,0.9));
+    border:1px solid rgba(120,180,255,0.25); border-radius:14px;
+    box-shadow:0 0 30px rgba(100,170,255,0.15);
+    padding:14px 16px; backdrop-filter: blur(10px); font-size:12.5px; line-height:1.45;
+  }
+  #ui h2 { font-size:15px; margin:0 0 6px 0; background:linear-gradient(90deg,#8fd0ff,#cfe8ff);
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #ui label { display:block; margin-top:10px; color:#c8ccdd; }
+  #ui input[type=range] { width:100%; accent-color:#8fd0ff; }
+  #readout, #photonReadout { margin-top:10px; padding:8px; background:rgba(255,255,255,0.04); border-radius:8px; font-family:'Consolas',monospace; font-size:11.5px; border:1px solid rgba(255,255,255,0.06); }
+  #readout div, #photonReadout div { display:flex; justify-content:space-between; }
+  details { margin-top:10px; border-top:1px solid rgba(255,255,255,0.1); padding-top:8px; }
+  summary { cursor:pointer; color:#8fd0ff; }
+  code { color:#ffd479; }
+  .toggle { display:flex; align-items:center; gap:8px; margin-top:10px; }
+  .legend { display:flex; gap:12px; margin-top:6px; font-size:10.5px; flex-wrap:wrap; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
+  #throatView { display:block; margin:10px auto 4px auto; border-radius:50%; background:#000; border:1px solid rgba(255,255,255,0.15); }
+  #viewCaption { text-align:center; font-size:10.5px; color:#9aa3c0; }
+  #stabilityChart, #divergenceChart { display:block; margin:10px auto 4px auto; background:#070912; border:1px solid rgba(255,255,255,0.12); border-radius:8px; }
+  #engineBadge { display:inline-block; font-size:9.5px; color:#6f7794; margin-top:4px; padding:2px 7px; border:1px solid rgba(255,255,255,0.12); border-radius:10px; }
+  #engineBadge.gpu { color:#57e6c9; border-color:rgba(87,230,201,0.35); }
+  .warn { color:#ffb066; font-size:11px; margin-top:6px; min-height:14px; }
+  #hint { position:fixed; bottom:10px; left:10px; font-size:11px; color:#6f7794; }
+
+  /* --- Hero científico --- */
+  #hero h1 { font-size:16px; margin:0 0 4px 0; color:#eaf4ff; letter-spacing:0.2px; }
+  #hero p { font-size:11px; color:#9fd3ff; margin:0 0 4px 0; font-family:'Consolas',monospace; }
+  #hero .subtitle-es { font-size:11px; color:#8f96b3; margin:0 0 8px 0; }
+
+  /* --- Ecuaciones KaTeX --- */
+  .eqn { margin:8px 0; overflow-x:auto; }
+  .katex { font-size:0.95em; }
+
+  /* --- Secciones NASA-style --- */
+  section.info-block { margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1); }
+  section.info-block h3 { font-size:12.5px; margin:0 0 6px 0; color:#8fd0ff; }
+  section.info-block ul { margin:0; padding-left:18px; font-size:11.5px; color:#c8ccdd; line-height:1.5; }
+  section.info-block p { font-size:11.5px; color:#c8ccdd; margin:0; line-height:1.5; }
+
+  /* --- Compartir vista --- */
+  #shareRow { display:flex; gap:6px; margin-top:10px; }
+  #shareBtn { flex:0 0 auto; background:linear-gradient(90deg,#3a6bff,#8f6bff); color:#fff; border:none;
+    border-radius:6px; padding:6px 10px; font-size:11.5px; cursor:pointer; }
+  #shareBtn:active { opacity:0.85; }
+  #shareLink { flex:1 1 auto; min-width:0; background:rgba(255,255,255,0.06); color:#c8ccdd; border:1px solid rgba(255,255,255,0.1);
+    border-radius:6px; padding:6px 8px; font-size:10.5px; font-family:'Consolas',monospace; }
+  #shareMsg { font-size:10.5px; color:#57e6c9; min-height:14px; margin-top:4px; }
+
+  /* --- Accesibilidad --- */
+  #renderCanvas:focus-visible { outline:2px solid #8fd0ff; outline-offset:-2px; }
+
+  /* --- Responsivo móvil --- */
+  @media (max-width:480px){
+    #ui { max-width:380px; width:92vw; font-size:12px; top:6px; left:6px; padding:12px 14px; }
+    #hero h1 { font-size:14px; }
+  }
+
+/* --- Panel de verificación física (nuevo en la versión modular) --- */
+#selfTestPanel { margin-top:10px; padding:8px; background:rgba(87,230,201,0.05); border:1px solid rgba(87,230,201,0.2); border-radius:8px; }
+#selfTestPanel h3 { font-size:12px; margin:0 0 6px 0; color:#57e6c9; }
+#selfTestResults div { font-size:11px; font-family:'Consolas',monospace; margin:3px 0; color:#c8ccdd; }
+#selfTestResults .fail { color:#ff6b6b; }
+
+/* --- Pulido visual: transiciones mas fluidas en controles --- */
+#ui button { transition: transform 0.15s ease, filter 0.15s ease, opacity 0.2s ease; }
+#ui button:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
+#ui button:active:not(:disabled) { transform: translateY(0); filter: brightness(0.95); }
+#ui button:disabled { opacity:0.55; cursor:not-allowed; transform:none; }
+#ui input[type=range] { transition: filter 0.15s ease; }
+#ui input[type=range]:hover { filter: brightness(1.2); }
+#ui canvas { transition: opacity 0.25s ease; }
+#ui section, #ui details, #ui > div { animation: fadeInUp 0.35s ease both; }
+@keyframes fadeInUp { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform: translateY(0); } }
+
+/* leve resplandor animado en el borde del panel, mas vivo que un borde fijo */
+#ui {
+  animation: panelGlow 6s ease-in-out infinite;
+}
+@keyframes panelGlow {
+  0%, 100% { box-shadow: 0 0 30px rgba(100,170,255,0.15); }
+  50%      { box-shadow: 0 0 42px rgba(140,170,255,0.26); }
+}

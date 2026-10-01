@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wormhole Navigator: Exact GR Ray-Tracer — Morris–Thorne / Ellis</title>
+<meta name="description" content="Simulador de un agujero de gusano de Morris-Thorne/Ellis: geodesicas de fotones resueltas en vivo con RK4, encaje isometrico exacto y auto-verificacion fisica. Proyecto para NASA Space Apps Challenge.">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+</head>
+<body>
+<canvas id="renderCanvas" tabindex="0" aria-label="Visualización 3D del agujero de gusano"></canvas>
+<div id="ui">
+  <div id="hero">
+    <h1>Wormhole Navigator: Exact GR Ray-Tracer</h1>
+    <p>Exact solution of Einstein's Field Equations, not an artistic impression.<br>
+       Real exotic-matter equation: ρ = −r₀²/8πr⁴</p>
+    <div class="subtitle-es">Agujero de gusano de Morris–Thorne (Ellis) — teórico:
+      requiere materia exótica (viola la condición de energía nula), nunca
+      observada. Es una simulación.</div>
+    <span id="engineBadge">detectando motor de render…</span>
+  </div>
+
+  <label>Radio de garganta r₀ = <span id="r0val"></span>
+    <input type="range" id="r0" min="0.5" max="2.0" step="0.05" value="1">
+  </label>
+  <div class="toggle" style="margin-top:8px">
+    <button id="formBtn" type="button" style="flex:1; background:linear-gradient(90deg,#3a6bff,#8f6bff); color:#fff; border:none; border-radius:6px; padding:7px 10px; font-size:11.5px; cursor:pointer;">
+      ▶ Formar la garganta desde el espacio plano
+    </button>
+  </div>
+  <div id="formStatus" style="font-size:10.5px; color:#8fd0ff; min-height:14px; margin-top:4px; font-family:'Consolas',monospace;"></div>
+  <label>Fotón de prueba: b/r₀ = <span id="bval"></span>
+    <input type="range" id="bRatio" min="0.05" max="3.0" step="0.01" value="0.9">
+  </label>
+  <label>Velocidad del viajero v/c = <span id="vval"></span>
+    <input type="range" id="vRatio" min="0" max="0.9" step="0.01" value="0">
+  </label>
+  <div class="toggle">
+    <input type="checkbox" id="cine"><label for="cine" style="margin:0">Modo cinemático (auto-rotación)</label>
+  </div>
+  <div class="toggle">
+    <input type="checkbox" id="animLens"><label for="animLens" style="margin:0">Animar la vista del eje</label>
+  </div>
+
+  <div class="legend">
+    <span><i class="dot" style="background:#57e6c9"></i>transmitido</span>
+    <span><i class="dot" style="background:#ffab4d"></i>reflejado</span>
+  </div>
+  <div id="photonReadout"></div>
+  <div id="readout"></div>
+
+  <canvas id="throatView" width="260" height="260"></canvas>
+  <div id="viewCaption">Vista mirando por el eje de la garganta: el "mundo" central
+    es luz transmitida del otro lado; el anillo es luz de este lado, curvada por la lente
+    gravitacional (efecto anillo de Einstein).</div>
+  <div id="lensWarn" class="warn"></div>
+
+  <canvas id="stabilityChart" width="292" height="160"></canvas>
+  <div id="viewCaption">
+    <b>Estabilidad orbital de fotones</b> (calculada en vivo): potencial
+    efectivo <span class="eqn" style="display:inline">$V_{\text{eff}}(\ell)=L^2/r(\ell)^2$</span>.
+    El máximo en la garganta es un equilibrio <i>inestable</i> — como la
+    esfera de fotones de un agujero negro.
+  </div>
+  <div id="metricStability" class="warn" style="color:#9fd3ff;"></div>
+
+  <section class="info-block">
+    <h3>📈 Diagnósticos en vivo</h3>
+    <canvas id="densityChart" width="292" height="110"></canvas>
+    <div id="viewCaption">Perfil espacial de materia exótica
+      <span class="eqn" style="display:inline">$|\rho(\ell)|=\tau(\ell)$</span>
+      (normalizado a su valor en la garganta). Reacciona en vivo durante la
+      formación y el colapso/inflado — no es una imagen estática.</div>
+
+    <canvas id="phaseChart" width="292" height="110"></canvas>
+    <div id="viewCaption">Retrato de fase del fotón de prueba: la curva es
+      <span class="eqn" style="display:inline">$p_\ell^2+b^2/r(\ell)^2=1$</span>;
+      el punto blanco es el <i>mismo</i> estado físico que el marcador 3D,
+      leído de su posición real cuadro a cuadro — 3D y gráfica están
+      literalmente acoplados, no son dos animaciones independientes.</div>
+  </section>
+
+  <div class="toggle" style="margin-top:10px">
+    <button id="instabilityBtn" type="button" style="flex:1; background:linear-gradient(90deg,#ff6b6b,#ffab4d); color:#fff; border:none; border-radius:6px; padding:7px 10px; font-size:11.5px; cursor:pointer;">
+      ▶ Demostrar inestabilidad orbital (fotones vecinos)
+    </button>
+  </div>
+  <canvas id="divergenceChart" width="292" height="120"></canvas>
+  <div id="demoStatus" style="font-size:10.5px; color:#8fd0ff; min-height:14px; margin-top:2px; font-family:'Consolas',monospace;"></div>
+  <div id="viewCaption">100% cálculo en vivo (mismo RK4 de siempre): tres fotones
+    casi idénticos, <code>b=r₀(1±δ)</code> y <code>b=r₀</code> exacto, lanzados
+    juntos. La gráfica mide su separación real en cada paso — nada está
+    pre-animado.</div>
+
+  <section id="toy-dynamics" class="info-block">
+    <h3>Dinámica del agujero de gusano (modelo ilustrativo)</h3>
+    <p style="margin-bottom:6px">⚠️ A diferencia de todo lo anterior, esto <b>no</b> resuelve
+      las ecuaciones de perturbación de Einstein — eso es un problema de
+      investigación abierto. Solo anima <code>r₀(t)=r₀·e^{±κt}</code> para
+      ilustrar el resultado <i>cualitativo</i> real de la literatura: el
+      agujero de gusano de Ellis colapsa a un agujero negro o se infla, según
+      el signo de la perturbación. La tasa κ es tuya para ajustar, no viene
+      de resolver el sistema completo.</p>
+    <label style="margin-top:2px">Tasa κ = <span id="kappaVal"></span>
+      <input type="range" id="kappaInput" min="0.3" max="2.5" step="0.05" value="1">
+    </label>
+    <div class="toggle">
+      <button id="collapseBtn" type="button" style="flex:1; background:linear-gradient(90deg,#661a1a,#ff6b6b); color:#fff; border:none; border-radius:6px; padding:7px 10px; font-size:11.5px; cursor:pointer;">☄ Colapsar</button>
+      <button id="inflateBtn" type="button" style="flex:1; background:linear-gradient(90deg,#1a5566,#57e6c9); color:#fff; border:none; border-radius:6px; padding:7px 10px; font-size:11.5px; cursor:pointer;">💥 Inflar</button>
+    </div>
+    <div id="toyStatus" style="font-size:10.5px; color:#ffab4d; min-height:14px; margin-top:4px; font-family:'Consolas',monospace;"></div>
+  </section>
+
+  <details open>
+    <summary>Fundamento físico y ecuaciones</summary>
+    <div style="margin-top:6px">
+      <b>Métrica exacta</b> (Ellis 1973 / Morris–Thorne 1988), Φ≡0 (sin
+      corrimiento al rojo gravitacional para observadores estáticos — a
+      diferencia de un agujero negro):
+      <div class="eqn">$$ ds^2 = -dt^2 + d\ell^2 + r(\ell)^2\, d\Omega^2 ,\qquad r(\ell)=\sqrt{\ell^2+r_0^2} $$</div>
+      Encaje isométrico exacto (la rejilla 3D que ves es este encaje literal,
+      no un dibujo estilizado; se aplana en ambos extremos porque
+      <span class="eqn" style="display:inline">$h'(\ell)\to 0$</span>):
+      <div class="eqn">$$ h(\ell) = r_0\,\operatorname{asinh}\!\left(\frac{\ell}{r_0}\right) \iff r = r_0\cosh\!\left(\frac{h}{r_0}\right) $$</div>
+      <b>Materia exótica</b> (ecuaciones de Einstein, G=c=1), forma de Ellis
+      <span class="eqn" style="display:inline">$b(r)=r_0^2/r$</span>:
+      <div class="eqn">$$ \rho(\ell) = -\frac{r_0^2}{8\pi\,r(\ell)^4}, \qquad \tau_0 = \frac{1}{8\pi r_0^2} $$</div>
+      Flare-out verificado: <span class="eqn" style="display:inline">$b'(r_0) = -1 < 1$</span> ✓. Masa ADM = 0.<br><br>
+      <b>Geodésicas nulas</b> (fotón, E=1, L=b), integradas con Runge–Kutta 4
+      (RK4) — ray-tracing real, no truco de shader:
+      <div class="eqn">$$ \frac{d^2\ell}{d\lambda^2} = \frac{L^2 r'(\ell)}{r(\ell)^3}, \qquad \frac{d\varphi}{d\lambda} = \frac{L}{r(\ell)^2} $$</div>
+      b&lt;r₀ ⇒ transmisión; b&gt;r₀ ⇒ reflexión por la barrera centrífuga
+      <span class="eqn" style="display:inline">$L^2/r(\ell)^2$</span> (máxima en la garganta).<br><br>
+      <b>Aberración relativista</b> del viajero (v/c hacia la garganta) y
+      <b>factor Doppler</b> (beaming, brillo ∝ δ³):
+      <div class="eqn">$$ \cos\theta_{\text{est}} = \frac{\cos\theta_{\text{viajero}} + v}{1+v\cos\theta_{\text{viajero}}}, \qquad \delta = \frac{1}{\gamma\,(1-v\cos\theta)} $$</div>
+      El corrimiento de color mostrado es una aproximación visual, no un
+      cálculo espectral exacto.<br><br>
+      El anillo y los patrones que veas en la vista del eje <b>no están
+      dibujados a mano</b>: salen de integrar Δφ(b) cerca de b=r₀, donde la
+      función diverge logarítmicamente (como la esfera de fotones de un
+      agujero negro). Cambiar r₀ o v puede revelar anillos secundarios o
+      patrones de moiré no anticipados.
+    </div>
+  </details>
+
+  <section id="method" class="info-block">
+    <h3>Por qué esto es ciencia real</h3>
+    <ul>
+      <li>Métrica exacta de Ellis: <span class="eqn" style="display:inline">$b(r)=r_0^2/r$</span>, solución legítima de las ecuaciones de campo de Einstein.</li>
+      <li>Condición de flare-out verificada numéricamente: <span class="eqn" style="display:inline">$b'(r_0)=-1$</span>.</li>
+      <li>Ray-tracing con integración RK4 de la ecuación geodésica real — no es un efecto de shader ni una animación pregrabada.</li>
+      <li>Cada deslizador reintegra las ecuaciones en vivo; nada de la forma final está dibujado a mano.</li>
+    </ul>
+  </section>
+
+  <section id="use-case" class="info-block">
+    <h3>¿Para qué sirve?</h3>
+    <p>Herramienta educativa para enseñar lente gravitacional, la condición de
+      energía nula (NEC) y geodésicas nulas en cursos universitarios de
+      Relatividad General, sin necesitar software especializado ni GPU
+      dedicada — corre entero en el navegador.</p>
+  </section>
+
+  <section id="data" class="info-block">
+    <h3>Stack técnico</h3>
+    <p>Babylon.js + WebGL para el render 3D, integración numérica RK4 en
+      JavaScript puro para las geodésicas, Canvas 2D para la lente
+      gravitacional del eje, KaTeX para las ecuaciones. 100% en el navegador,
+      sin backend ni servidor.</p>
+  </section>
+
+  <section id="selfTestPanel">
+    <h3>🧪 Auto-verificación física (en vivo)</h3>
+    <p style="font-size:11px;color:#9aa3c0;margin:0 0 6px 0">
+      Estas pruebas recalculan identidades exactas de la solución de Ellis
+      cada vez que cambias r₀, usando solo physics.js — no son valores fijos
+      ni decorativos: si algo se rompe, esto lo muestra.
+    </p>
+    <div id="selfTestResults">ejecutando pruebas…</div>
+  </section>
+
+  <div id="shareRow">
+    <button id="shareBtn" type="button">Share View</button>
+    <input id="shareLink" type="text" readonly aria-label="Enlace para compartir esta vista">
+  </div>
+  <div id="shareMsg"></div>
+</div>
+<div id="hint">Arrastra para orbitar · pellizca/rueda para zoom</div>
+
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<!-- Scripts clasicos (no ES modules) en orden de dependencia, para que
+     index.html funcione abriendolo directamente por doble clic, sin
+     servidor ni paso de build: -->
+<script src="js/physics.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/verify.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

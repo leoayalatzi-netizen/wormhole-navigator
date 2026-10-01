@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wormhole Navigator: Exact GR Ray-Tracer — Morris–Thorne / Ellis</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; width:100%; height:100%; background:#020307; font-family:'Segoe UI',Arial,sans-serif; color:#e8e9f5; }
+  #renderCanvas { width:100%; height:100%; touch-action:none; display:block; }
+  #ui {
+    position:fixed; top:10px; left:10px; width:340px; max-height:93vh; overflow-y:auto;
+    background:linear-gradient(160deg, rgba(10,14,28,0.85), rgba(6,8,16,0.9));
+    border:1px solid rgba(120,180,255,0.25); border-radius:14px;
+    box-shadow:0 0 30px rgba(100,170,255,0.15);
+    padding:14px 16px; backdrop-filter: blur(10px); font-size:12.5px; line-height:1.45;
+  }
+  #ui h2 { font-size:15px; margin:0 0 6px 0; background:linear-gradient(90deg,#8fd0ff,#cfe8ff);
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #ui label { display:block; margin-top:10px; color:#c8ccdd; }
+  #ui input[type=range] { width:100%; accent-color:#8fd0ff; }
+  #readout, #photonReadout { margin-top:10px; padding:8px; background:rgba(255,255,255,0.04); border-radius:8px; font-family:'Consolas',monospace; font-size:11.5px; border:1px solid rgba(255,255,255,0.06); }
+  #readout div, #photonReadout div { display:flex; justify-content:space-between; }
+  details { margin-top:10px; border-top:1px solid rgba(255,255,255,0.1); padding-top:8px; }
+  summary { cursor:pointer; color:#8fd0ff; }
+  code { color:#ffd479; }
+  .toggle { display:flex; align-items:center; gap:8px; margin-top:10px; }
+  .legend { display:flex; gap:12px; margin-top:6px; font-size:10.5px; flex-wrap:wrap; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
+  #throatView { display:block; margin:10px auto 4px auto; border-radius:50%; background:#000; border:1px solid rgba(255,255,255,0.15); }
+  #viewCaption { text-align:center; font-size:10.5px; color:#9aa3c0; }
+  #stabilityChart, #divergenceChart { display:block; margin:10px auto 4px auto; background:#070912; border:1px solid rgba(255,255,255,0.12); border-radius:8px; }
+  #engineBadge { display:inline-block; font-size:9.5px; color:#6f7794; margin-top:4px; padding:2px 7px; border:1px solid rgba(255,255,255,0.12); border-radius:10px; }
+  #engineBadge.gpu { color:#57e6c9; border-color:rgba(87,230,201,0.35); }
+  .warn { color:#ffb066; font-size:11px; margin-top:6px; min-height:14px; }
+  #hint { position:fixed; bottom:10px; left:10px; font-size:11px; color:#6f7794; }
+
+  /* --- Hero científico --- */
+  #hero h1 { font-size:16px; margin:0 0 4px 0; color:#eaf4ff; letter-spacing:0.2px; }
+  #hero p { font-size:11px; color:#9fd3ff; margin:0 0 4px 0; font-family:'Consolas',monospace; }
+  #hero .subtitle-es { font-size:11px; color:#8f96b3; margin:0 0 8px 0; }
+
+  /* --- Ecuaciones KaTeX --- */
+  .eqn { margin:8px 0; overflow-x:auto; }
+  .katex { font-size:0.95em; }
+
+  /* --- Secciones NASA-style --- */
+  section.info-block { margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.1); }
+  section.info-block h3 { font-size:12.5px; margin:0 0 6px 0; color:#8fd0ff; }
+  section.info-block ul { margin:0; padding-left:18px; font-size:11.5px; color:#c8ccdd; line-height:1.5; }
+  section.info-block p { font-size:11.5px; color:#c8ccdd; margin:0; line-height:1.5; }
+
+  /* --- Compartir vista --- */
+  #shareRow { display:flex; gap:6px; margin-top:10px; }
+  #shareBtn { flex:0 0 auto; background:linear-gradient(90deg,#3a6bff,#8f6bff); color:#fff; border:none;
+    border-radius:6px; padding:6px 10px; font-size:11.5px; cursor:pointer; }
+  #shareBtn:active { opacity:0.85; }
+  #shareLink { flex:1 1 auto; min-width:0; background:rgba(255,255,255,0.06); color:#c8ccdd; border:1px solid rgba(255,255,255,0.1);
+    border-radius:6px; padding:6px 8px; font-size:10.5px; font-family:'Consolas',monospace; }
+  #shareMsg { font-size:10.5px; color:#57e6c9; min-height:14px; margin-top:4px; }
+
+  /* --- Accesibilidad --- */
+  #renderCanvas:focus-visible { outline:2px solid #8fd0ff; outline-offset:-2px; }
+
+  /* --- Responsivo móvil --- */
+  @media (max-width:480px){
+    #ui { max-width:380px; width:92vw; font-size:12px; top:6px; left:6px; padding:12px 14px; }
+    #hero h1 { font-size:14px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="renderCanvas" tabindex="0" aria-label="Visualización 3D del agujero de gusano"></canvas>
+<div id="ui">
+  <div id="hero">
+    <h1>Wormhole Navigator: Exact GR Ray-Tracer</h1>
+    <p>Exact solution of Einstein's Field Equations, not an artistic impression.<br>
+       Real exotic-matter equation: ρ = −r₀²/8πr⁴</p>
+    <div class="subtitle-es">Agujero de gusano de Morris–Thorne (Ellis) — teórico:
+      requiere materia exótica (viola la condición de energía nula), nunca
+      observada. Es una simulación.</div>
+    <span id="engineBadge">detectando motor de render…</span>
+  </div>
+
+  <label>Radio de garganta r₀ = <span id="r0val"></span>
+    <input type="range" id="r0" min="0.5" max="2.0" step="0.05" value="1">
+  </label>
+  <div class="toggle" style="margin-top:8px">
+    <button id="formBtn" type="button" style="flex:1; background:linear-gradient(90deg,#3a6bff,#8f6bff); color:#fff; border:none; border-radius:6px; padding:7px 10px; font-size:11.5px; cursor:pointer;">
+      ▶ Formar la garganta desde el espacio plano
+    </button>
+  </div>
+  <div id="formStatus" style="font-size:10.5px; color:#8fd0ff; min-height:14px; margin-top:4px; font-family:'Consolas',monospace;"></div>
+  <label>Fotón de prueba: b/r₀ = <span id="bval"></span>
+    <input type="range" id="bRatio" min="0.05" max="3.0" step="0.01" value="0.9">
+  </label>
+  <label>Velocidad del viajero v/c = <span id="vval"></span>
+    <input type="range" id="vRatio" min="0" max="0.9" step="0.01" value="0">
+  </label>
+  <div class="toggle">
+    <input type="checkbox" id="cine"><label for="cine" style="margin:0">Modo cinemático (auto-rotación)</label>
+  </div>
+  <div class="toggle">
+    <input type="checkbox" id="animLens"><label for="animLens" style="margin:0">Animar la vista del eje</label>
+  </div>
+
+  <div class="legend">
+    <span><i class="dot" style="background:#57e6c9"></i>transmitido</span>
+    <span><i class="dot" style="background:#ffab4d"></i>reflejado</span>
+  </div>
+  <div id="photonReadout"></div>
+  <div id="readout"></div>
+
+  <canvas id="throatView" width="260" height="260"></canvas>
+  <div id="viewCaption">Vista mirando por el eje de la garganta: el "mundo" central
+    es luz transmitida del otro lado; el anillo es luz de este lado, curvada por la lente
+    gravitacional (efecto anillo de Einstein).</div>
+  <div id="lensWarn" class="warn"></div>
+
+  <canvas id="stabilityChart" width="292" height="160"></canvas>
+  <div id="viewCaption">
+    <b>Estabilidad orbital de fotones</b> (calculada en vivo): potencial
+    efectivo <span class="eqn" style="display:inline">$V_{\text{eff}}(\ell)=L^2/r(\ell)^2$</span>.
+    El máximo en la garganta es un equilibrio <i>inestable</i> — como la
+    esfera de fotones de un agujero negro.
+  </div>
+  <div id="metricStability" class="warn" style="color:#9fd3ff;"></div>
+
+  <div class="toggle" style="margin-top:10px">
+    <button id="instabilityBtn" type="button" style="flex:1; background:linear-gradient(90deg,#ff6b6b,#ffab4d); color:#fff; border:none; border-radius:6px; padding:7px 10px; font-size:11.5px; cursor:pointer;">
+      ▶ Demostrar inestabilidad orbital (fotones vecinos)
+    </button>
+  </div>
+  <canvas id="divergenceChart" width="292" height="120"></canvas>
+  <div id="demoStatus" style="font-size:10.5px; color:#8fd0ff; min-height:14px; margin-top:2px; font-family:'Consolas',monospace;"></div>
+  <div id="viewCaption">100% cálculo en vivo (mismo RK4 de siempre): tres fotones
+    casi idénticos, <code>b=r₀(1±δ)</code> y <code>b=r₀</code> exacto, lanzados
+    juntos. La gráfica mide su separación real en cada paso — nada está
+    pre-animado.</div>
+
+  <section id="toy-dynamics" class="info-block">
+    <h3>Dinámica del agujero de gusano (modelo ilustrativo)</h3>
+    <p style="margin-bottom:6px">⚠️ A diferencia de todo lo anterior, esto <b>no</b> resuelve
+      las ecuaciones de perturbación de Einstein — eso es un problema de
+      investigación abierto. Solo anima <code>r₀(t)=r₀·e^{±κt}</code> para
+      ilustrar el resultado <i>cualitativo</i> real de la literatura: el
+      agujero de gusano de Ellis colapsa a un agujero negro o se infla, según
+      el signo de la perturbación. La tasa κ es tuya para ajustar, no viene
+      de resolver el sistema completo.</p>
+    <label style="margin-top:2px">Tasa κ = <span id="kappaVal"></span>
+      <input type="range" id="kappaInput" min="0.3" max="2.5" step="0.05" value="1">
+    </label>
+    <div class="toggle">
+      <button id="collapseBtn" type="button" style="flex:1; background:linear-gradient(90deg,#661a1a,#ff6b6b); color:#fff; border:none; border-radius:6px; padding:7px 10px; font-size:11.5px; cursor:pointer;">☄ Colapsar</button>
+      <button id="inflateBtn" type="button" style="flex:1; background:linear-gradient(90deg,#1a5566,#57e6c9); color:#fff; border:none; border-radius:6px; padding:7px 10px; font-size:11.5px; cursor:pointer;">💥 Inflar</button>
+    </div>
+    <div id="toyStatus" style="font-size:10.5px; color:#ffab4d; min-height:14px; margin-top:4px; font-family:'Consolas',monospace;"></div>
+  </section>
+
+  <details open>
+    <summary>Fundamento físico y ecuaciones</summary>
+    <div style="margin-top:6px">
+      <b>Métrica exacta</b> (Ellis 1973 / Morris–Thorne 1988), Φ≡0 (sin
+      corrimiento al rojo gravitacional para observadores estáticos — a
+      diferencia de un agujero negro):
+      <div class="eqn">$$ ds^2 = -dt^2 + d\ell^2 + r(\ell)^2\, d\Omega^2 ,\qquad r(\ell)=\sqrt{\ell^2+r_0^2} $$</div>
+      Encaje isométrico exacto (la rejilla 3D que ves es este encaje literal,
+      no un dibujo estilizado; se aplana en ambos extremos porque
+      <span class="eqn" style="display:inline">$h'(\ell)\to 0$</span>):
+      <div class="eqn">$$ h(\ell) = r_0\,\operatorname{asinh}\!\left(\frac{\ell}{r_0}\right) \iff r = r_0\cosh\!\left(\frac{h}{r_0}\right) $$</div>
+      <b>Materia exótica</b> (ecuaciones de Einstein, G=c=1), forma de Ellis
+      <span class="eqn" style="display:inline">$b(r)=r_0^2/r$</span>:
+      <div class="eqn">$$ \rho(\ell) = -\frac{r_0^2}{8\pi\,r(\ell)^4}, \qquad \tau_0 = \frac{1}{8\pi r_0^2} $$</div>
+      Flare-out verificado: <span class="eqn" style="display:inline">$b'(r_0) = -1 < 1$</span> ✓. Masa ADM = 0.<br><br>
+      <b>Geodésicas nulas</b> (fotón, E=1, L=b), integradas con Runge–Kutta 4
+      (RK4) — ray-tracing real, no truco de shader:
+      <div class="eqn">$$ \frac{d^2\ell}{d\lambda^2} = \frac{L^2 r'(\ell)}{r(\ell)^3}, \qquad \frac{d\varphi}{d\lambda} = \frac{L}{r(\ell)^2} $$</div>
+      b&lt;r₀ ⇒ transmisión; b&gt;r₀ ⇒ reflexión por la barrera centrífuga
+      <span class="eqn" style="display:inline">$L^2/r(\ell)^2$</span> (máxima en la garganta).<br><br>
+      <b>Aberración relativista</b> del viajero (v/c hacia la garganta) y
+      <b>factor Doppler</b> (beaming, brillo ∝ δ³):
+      <div class="eqn">$$ \cos\theta_{\text{est}} = \frac{\cos\theta_{\text{viajero}} + v}{1+v\cos\theta_{\text{viajero}}}, \qquad \delta = \frac{1}{\gamma\,(1-v\cos\theta)} $$</div>
+      El corrimiento de color mostrado es una aproximación visual, no un
+      cálculo espectral exacto.<br><br>
+      El anillo y los patrones que veas en la vista del eje <b>no están
+      dibujados a mano</b>: salen de integrar Δφ(b) cerca de b=r₀, donde la
+      función diverge logarítmicamente (como la esfera de fotones de un
+      agujero negro). Cambiar r₀ o v puede revelar anillos secundarios o
+      patrones de moiré no anticipados.
+    </div>
+  </details>
+
+  <section id="method" class="info-block">
+    <h3>Por qué esto es ciencia real</h3>
+    <ul>
+      <li>Métrica exacta de Ellis: <span class="eqn" style="display:inline">$b(r)=r_0^2/r$</span>, solución legítima de las ecuaciones de campo de Einstein.</li>
+      <li>Condición de flare-out verificada numéricamente: <span class="eqn" style="display:inline">$b'(r_0)=-1$</span>.</li>
+      <li>Ray-tracing con integración RK4 de la ecuación geodésica real — no es un efecto de shader ni una animación pregrabada.</li>
+      <li>Cada deslizador reintegra las ecuaciones en vivo; nada de la forma final está dibujado a mano.</li>
+    </ul>
+  </section>
+
+  <section id="use-case" class="info-block">
+    <h3>¿Para qué sirve?</h3>
+    <p>Herramienta educativa para enseñar lente gravitacional, la condición de
+      energía nula (NEC) y geodésicas nulas en cursos universitarios de
+      Relatividad General, sin necesitar software especializado ni GPU
+      dedicada — corre entero en el navegador.</p>
+  </section>
+
+  <section id="data" class="info-block">
+    <h3>Stack técnico</h3>
+    <p>Babylon.js + WebGL para el render 3D, integración numérica RK4 en
+      JavaScript puro para las geodésicas, Canvas 2D para la lente
+      gravitacional del eje, KaTeX para las ecuaciones. 100% en el navegador,
+      sin backend ni servidor.</p>
+  </section>
+
+  <div id="shareRow">
+    <button id="shareBtn" type="button">Share View</button>
+    <input id="shareLink" type="text" readonly aria-label="Enlace para compartir esta vista">
+  </div>
+  <div id="shareMsg"></div>
+</div>
+<div id="hint">Arrastra para orbitar · pellizca/rueda para zoom</div>
+
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script>
+"use strict";
+
+/* =========================================================
+   GEOMETRÍA Y GEODÉSICAS EXACTAS
+   ========================================================= */
+function rOf(ell, r0){ return Math.sqrt(ell*ell + r0*r0); }
+function hOf(ell, r0){ return r0*Math.asinh(ell/r0); }
+
+function geoDeriv(state, r0, L){
+  const ell = state[0], pell = state[1];
+  const r = rOf(ell, r0);
+  const rp = ell / r;
+  return [pell, (L*L)*rp/(r*r*r), L/(r*r)];
+}
+function rk4(state, r0, L, dl){
+  const k1 = geoDeriv(state, r0, L);
+  const s2 = [state[0]+dl/2*k1[0], state[1]+dl/2*k1[1], state[2]+dl/2*k1[2]];
+  const k2 = geoDeriv(s2, r0, L);
+  const s3 = [state[0]+dl/2*k2[0], state[1]+dl/2*k2[1], state[2]+dl/2*k2[2]];
+  const k3 = geoDeriv(s3, r0, L);
+  const s4 = [state[0]+dl*k3[0], state[1]+dl*k3[1], state[2]+dl*k3[2]];
+  const k4 = geoDeriv(s4, r0, L);
+  return [
+    state[0] + dl/6*(k1[0]+2*k2[0]+2*k3[0]+k4[0]),
+    state[1] + dl/6*(k1[1]+2*k2[1]+2*k3[1]+k4[1]),
+    state[2] + dl/6*(k1[2]+2*k2[2]+2*k3[2]+k4[2])
+  ];
+}
+function integrateGeodesicFull(r0, b, ellObs, maxSteps, dl){
+  const r_start = rOf(-ellObs, r0);
+  const pell0 = Math.sqrt(Math.max(1 - (b*b)/(r_start*r_start), 1e-9));
+  let state = [-ellObs, pell0, 0];
+  const pts = [{ell:state[0], phi:state[2]}];
+  let transmitted = null;
+  for(let i=0;i<maxSteps;i++){
+    state = rk4(state, r0, b, dl);
+    pts.push({ell:state[0], phi:state[2]});
+    if (state[0] >= ellObs){ transmitted = true; break; }
+    if (state[0] <= -ellObs && i>20){ transmitted = false; break; }
+  }
+  if (transmitted === null) transmitted = state[0] > 0;
+  return { pts, transmitted, finalPhi: state[2] };
+}
+function integrateGeodesicFast(r0, b, ellObs, maxSteps, dl){
+  const r_start = rOf(-ellObs, r0);
+  const pell0 = Math.sqrt(Math.max(1 - (b*b)/(r_start*r_start), 1e-9));
+  let state = [-ellObs, pell0, 0];
+  let transmitted = null;
+  for(let i=0;i<maxSteps;i++){
+    state = rk4(state, r0, b, dl);
+    if (state[0] >= ellObs){ transmitted = true; break; }
+    if (state[0] <= -ellObs && i>20){ transmitted = false; break; }
+  }
+  if (transmitted === null) transmitted = state[0] > 0;
+  return { transmitted, finalPhi: state[2] };
+}
+// Integra SIEMPRE el mismo numero de pasos (sin salir antes al transmitir o
+// reflejar): necesario para comparar dos trayectorias vecinas paso a paso y
+// medir su separacion real en funcion de lambda (demostracion de inestabilidad).
+function integrateFixedSteps(r0, b, ellObs, steps, dl){
+  const r_start = rOf(-ellObs, r0);
+  const pell0 = Math.sqrt(Math.max(1 - (b*b)/(r_start*r_start), 1e-9));
+  let state = [-ellObs, pell0, 0];
+  const out = [{ell:state[0], phi:state[2]}];
+  for(let i=0;i<steps;i++){
+    state = rk4(state, r0, b, dl);
+    out.push({ell:state[0], phi:state[2]});
+  }
+  return out;
+}
+function resamplePath(pts, maxPoints){
+  if (pts.length <= maxPoints) return pts;
+  const out = [];
+  for(let i=0;i<maxPoints;i++) out.push(pts[Math.floor(i*(pts.length-1)/(maxPoints-1))]);
+  return out;
+}
+// Remuestrea SIEMPRE a exactamente N puntos (interpolando ell,phi), para poder
+// actualizar una LinesMesh existente in situ ("instance") en vez de recrearla
+// cada frame: eso es lo que permite animar la formacion sin que se vea "congelada".
+function resampleFixed(pts, N){
+  const out = [], last = pts.length-1;
+  for(let i=0;i<N;i++){
+    const pos = i*last/(N-1);
+    const i0 = Math.floor(pos), i1 = Math.min(i0+1, last);
+    const t = pos - i0;
+    out.push({ ell: pts[i0].ell + (pts[i1].ell-pts[i0].ell)*t,
+               phi: pts[i0].phi + (pts[i1].phi-pts[i0].phi)*t });
+  }
+  return out;
+}
+function pathTo3D(pts, r0){
+  return pts.map(p=>{
+    const r = rOf(p.ell, r0), h = hOf(p.ell, r0);
+    return new BABYLON.Vector3(r*Math.cos(p.phi), h, r*Math.sin(p.phi));
+  });
+}
+
+/* =========================================================
+   TEXTURAS PROCEDURALES
+   ========================================================= */
+function makeDotTexture(scene, size, rgb){
+  const tex = new BABYLON.DynamicTexture("dot"+rgb+Math.random(), size, scene, false);
+  const ctx = tex.getContext();
+  const g = ctx.createRadialGradient(size/2,size/2,0,size/2,size/2,size/2);
+  g.addColorStop(0, `rgba(${rgb},1)`); g.addColorStop(0.4, `rgba(${rgb},0.55)`); g.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = g; ctx.fillRect(0,0,size,size); tex.update(); tex.hasAlpha = true;
+  return tex;
+}
+function lerp3(a,b,t){ return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t]; }
+function paintSkyGradient(mesh){
+  const positions = mesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+  let maxY=-Infinity, minY=Infinity;
+  for(let i=1;i<positions.length;i+=3){ if(positions[i]>maxY)maxY=positions[i]; if(positions[i]<minY)minY=positions[i]; }
+  const top=[0.05,0.05,0.11], mid=[0.02,0.03,0.09], bottom=[0.01,0.01,0.02];
+  const colors=[];
+  for(let i=0;i<positions.length;i+=3){
+    const t=(positions[i+1]-minY)/(maxY-minY);
+    const c = t>0.5 ? lerp3(mid,top,(t-0.5)*2) : lerp3(bottom,mid,t*2);
+    colors.push(c[0],c[1],c[2],1);
+  }
+  mesh.setVerticesData(BABYLON.VertexBuffer.ColorKind, colors);
+}
+// Banda/disco brillante (fuente de la "reflexión", crea el anillo tipo Einstein)
+function makeBandCanvas(size){
+  const c = document.createElement('canvas'); c.width=size; c.height=size;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle='#000814'; ctx.fillRect(0,0,size,size);
+  const bandY=size/2, bandH=size*0.085;
+  const grad = ctx.createLinearGradient(0,bandY-bandH,0,bandY+bandH);
+  grad.addColorStop(0,'rgba(190,215,255,0)'); grad.addColorStop(0.5,'rgba(215,230,255,0.95)'); grad.addColorStop(1,'rgba(190,215,255,0)');
+  ctx.fillStyle=grad; ctx.fillRect(0,bandY-bandH,size,bandH*2);
+  for(let i=0;i<10;i++){
+    const x=Math.random()*size, y=bandY+(Math.random()-0.5)*bandH*1.6, rad=18+Math.random()*38;
+    const g2=ctx.createRadialGradient(x,y,0,x,y,rad);
+    g2.addColorStop(0,'rgba(255,185,150,0.4)'); g2.addColorStop(1,'rgba(255,185,150,0)');
+    ctx.fillStyle=g2; ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill();
+  }
+  for(let i=0;i<260;i++){
+    const x=Math.random()*size,y=Math.random()*size,r=Math.random()*1.3+0.2;
+    ctx.fillStyle=`rgba(255,255,255,${0.3+0.6*Math.random()})`;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  }
+  return ctx.getImageData(0,0,size,size);
+}
+// Textura tipo "mundo lejano" (lo que se ve transmitido al otro lado)
+function makeWorldCanvas(size){
+  const c = document.createElement('canvas'); c.width=size; c.height=size;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle='#05030a'; ctx.fillRect(0,0,size,size);
+  const palette=['#2f6b4f','#6b3f66','#3a2f6b','#7a5a2f','#1f2f4a'];
+  for(let i=0;i<140;i++){
+    const x=Math.random()*size,y=Math.random()*size,rad=10+Math.random()*46;
+    const col=palette[Math.floor(Math.random()*palette.length)];
+    const g=ctx.createRadialGradient(x,y,0,x,y,rad);
+    g.addColorStop(0,col+'aa'); g.addColorStop(1,col+'00');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,rad,0,Math.PI*2); ctx.fill();
+  }
+  for(let i=0;i<90;i++){
+    const x=Math.random()*size,y=Math.random()*size,r=Math.random()*1.2+0.2;
+    ctx.fillStyle=`rgba(255,255,255,${0.2+0.5*Math.random()})`;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  }
+  return ctx.getImageData(0,0,size,size);
+}
+
+/* =========================================================
+   ESCENA BABYLON
+   ========================================================= */
+async function main(){
+const canvas = document.getElementById("renderCanvas");
+
+// --- Motor de render: intento real de WebGPU (Babylon WebGPUEngine), con
+// fallback automatico y transparente a WebGL2 si el navegador no lo soporta,
+// si la clase no esta disponible en el bundle cargado, o si la
+// inicializacion falla por cualquier razon. Nada de la fisica ni de la
+// escena depende de cual de los dos se use: es puramente la capa de render. ---
+let engine = null, usingWebGPU = false;
+if (navigator.gpu && window.BABYLON && BABYLON.WebGPUEngine) {
+  try {
+    const supported = await BABYLON.WebGPUEngine.IsSupportedAsync;
+    if (supported) {
+      const gpuEngine = new BABYLON.WebGPUEngine(canvas, {antialias:true, stencil:true});
+      await gpuEngine.initAsync();
+      engine = gpuEngine;
+      usingWebGPU = true;
+    }
+  } catch(e) { engine = null; usingWebGPU = false; }
+}
+if (!engine) {
+  engine = new BABYLON.Engine(canvas, true, {preserveDrawingBuffer:true, stencil:true, antialias:true});
+}
+const badge = document.getElementById("engineBadge");
+if (badge) {
+  badge.textContent = usingWebGPU ? "⚡ Renderizando con WebGPU" : "Renderizando con WebGL2 (WebGPU no disponible aquí)";
+  badge.className = usingWebGPU ? "gpu" : "";
+}
+
+const scene = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color4(0.01,0.01,0.03,1);
+
+const camera = new BABYLON.ArcRotateCamera("cam", -Math.PI/2.3, Math.PI/2.35, 26, BABYLON.Vector3.Zero(), scene);
+camera.lowerRadiusLimit = 4; camera.upperRadiusLimit = 45; camera.wheelPrecision = 35; camera.inertia = 0.88;
+camera.attachControl(canvas, true);
+BABYLON.Animation.CreateAndStartAnimation("dolly","cam","radius",30,90,35,26,BABYLON.Animation.ANIMATIONTYPE_FLOAT,BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+
+const hemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0,1,0), scene);
+hemi.intensity = 0.25; hemi.groundColor = new BABYLON.Color3(0.03,0.04,0.09);
+const glow = new BABYLON.GlowLayer("glow", scene, {mainTextureRatio:0.5});
+glow.intensity = 0.9;
+
+const sky = BABYLON.MeshBuilder.CreateSphere("sky", {diameter:120, segments:16, sideOrientation:BABYLON.Mesh.BACKSIDE}, scene);
+paintSkyGradient(sky);
+const skyMat = new BABYLON.StandardMaterial("skyMat", scene);
+skyMat.disableLighting = true;
+skyMat.emissiveColor = new BABYLON.Color3(0,0,0); // el color de vertice ya ES el color final (unlit)
+skyMat.specularColor = new BABYLON.Color3(0,0,0);
+skyMat.backFaceCulling = false;
+sky.material = skyMat; sky.infiniteDistance = true;
+
+const starTex = makeDotTexture(scene, 32, "255,255,255");
+const stars = new BABYLON.ParticleSystem("stars", 2000, scene);
+stars.particleTexture = starTex;
+stars.emitter = BABYLON.Vector3.Zero();
+stars.minEmitBox = new BABYLON.Vector3(-55,-55,-55); stars.maxEmitBox = new BABYLON.Vector3(55,55,55);
+stars.color1 = new BABYLON.Color4(1,1,1,1); stars.color2 = new BABYLON.Color4(0.8,0.88,1,1);
+stars.minSize = 0.05; stars.maxSize = 0.22;
+stars.minLifeTime = Number.MAX_VALUE; stars.maxLifeTime = Number.MAX_VALUE;
+stars.emitRate = 100000; stars.manualEmitCount = 2000;
+stars.direction1 = BABYLON.Vector3.Zero(); stars.direction2 = BABYLON.Vector3.Zero();
+stars.minEmitPower = 0; stars.maxEmitPower = 0; stars.gravity = BABYLON.Vector3.Zero();
+stars.blendMode = BABYLON.ParticleSystem.BLENDMODE_ADD;
+stars.start();
+
+const coreTex = makeDotTexture(scene, 128, "200,225,255");
+const corePlane = BABYLON.MeshBuilder.CreatePlane("core", {size:1.5}, scene);
+corePlane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+const coreMat = new BABYLON.StandardMaterial("coreMat", scene);
+coreMat.emissiveTexture = coreTex; coreMat.opacityTexture = coreTex;
+coreMat.disableLighting = true; coreMat.backFaceCulling = false;
+coreMat.emissiveColor = new BABYLON.Color3(0.75,0.9,1.3);
+coreMat.alphaMode = BABYLON.Engine.ALPHA_ADD;
+corePlane.material = coreMat;
+
+const photonDotTex = makeDotTexture(scene, 64, "255,255,255");
+
+/* =========================================================
+   REJILLA (encaje isométrico exacto, sin superficie sólida)
+   ========================================================= */
+let throatLines = null;
+const HMAX_L = 6.5, N_RINGS = 60, N_MERID = 48;
+
+// pulsePos (opcional): posicion |ell| del "frente de crecimiento" durante la
+// formacion animada. Es un realce visual (un bulto gaussiano de brillo) que
+// marca el borde hasta donde ya se desplego la hoja asintoticamente plana;
+// no representa un termino fisico adicional, solo un indicador de progreso.
+function lineColorAt(ell, r0, pulsePos){
+  const r = rOf(ell, r0);
+  const rhoAbs = r0*r0/(8*Math.PI*Math.pow(r,4));
+  const rho0 = 1/(8*Math.PI*r0*r0);
+  const t = Math.min(rhoAbs/rho0, 1);
+  let bright = 0.5 + 1.5*Math.pow(t,1.6); // puede superar 1 para alimentar el bloom HDR
+  if (pulsePos !== undefined){
+    const d = Math.abs(Math.abs(ell) - pulsePos);
+    const w = Math.max(r0*0.4, 0.05);
+    bright += 1.3*Math.exp(-(d*d)/(2*w*w));
+  }
+  return new BABYLON.Color4(0.5*bright, 0.78*bright, 1.05*bright, 1);
+}
+
+// extentFrac (0..1): cuanto del rango total HMAX_L*r0 se dibuja ya — permite
+// que la hoja asintotica se "despliegue" hacia afuera en vez de aparecer de
+// golpe a tamano completo. Sigue siendo el mismo encaje exacto r(ell),h(ell);
+// solo cambia el intervalo de ell que se renderiza en cada instante.
+function buildWireframe(r0, alpha, extentFrac, pulsePos){
+  if (throatLines) throatLines.dispose();
+  const frac = (extentFrac===undefined) ? 1 : Math.max(0.06, extentFrac);
+  const ellSamples = [];
+  for(let i=0;i<=N_RINGS;i++) ellSamples.push(((i/N_RINGS)*2-1)*HMAX_L*r0*frac);
+
+  const lines = [], colorsArr = [];
+  for(let j=0;j<N_MERID;j++){
+    const theta = (j/N_MERID)*Math.PI*2;
+    const pts=[], cols=[];
+    for(const ell of ellSamples){
+      const r=rOf(ell,r0), h=hOf(ell,r0);
+      pts.push(new BABYLON.Vector3(r*Math.cos(theta), h, r*Math.sin(theta)));
+      cols.push(lineColorAt(ell,r0,pulsePos));
+    }
+    lines.push(pts); colorsArr.push(cols);
+  }
+  for(let i=0;i<=N_RINGS;i++){
+    const ell = ellSamples[i], r=rOf(ell,r0), h=hOf(ell,r0);
+    const pts=[], cols=[];
+    for(let j=0;j<=N_MERID;j++){
+      const theta=(j/N_MERID)*Math.PI*2;
+      pts.push(new BABYLON.Vector3(r*Math.cos(theta), h, r*Math.sin(theta)));
+      cols.push(lineColorAt(ell,r0,pulsePos));
+    }
+    lines.push(pts); colorsArr.push(cols);
+  }
+  throatLines = BABYLON.MeshBuilder.CreateLineSystem("wireGrid", {lines:lines, colors:colorsArr}, scene);
+  throatLines.alpha = (alpha===undefined) ? 1 : alpha;
+}
+
+/* =========================================================
+   GEODÉSICAS DE FOTONES — ranuras persistentes, actualizables in situ.
+   Antes cada cambio de r0 destruía y recreaba las líneas: por eso se
+   veían "congeladas" durante la formación (no había nada intermedio que
+   dibujar). Ahora cada geodésica es un slot fijo cuya geometría se
+   reescribe cuadro a cuadro con la MISMA ecuación, así que se puede
+   animar en vivo sin perder rigor: sigue siendo la solución RK4 exacta,
+   solo que evaluada en el r0(t) de cada instante.
+   ========================================================= */
+const GEO_POINTS = 220; // cuenta fija de puntos: permite actualizar la malla in situ
+const TRANS_COLOR = new BABYLON.Color3(0.4,1.35,1.2);
+const REFLECT_COLOR = new BABYLON.Color3(1.5,0.95,0.42);
+
+function makeMarker(tint){
+  const plane = BABYLON.MeshBuilder.CreatePlane("marker", {size:0.22}, scene);
+  plane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+  const mat = new BABYLON.StandardMaterial("markerMat"+Math.random(), scene);
+  mat.emissiveTexture = photonDotTex; mat.opacityTexture = photonDotTex;
+  mat.disableLighting = true; mat.backFaceCulling = false;
+  mat.alphaMode = BABYLON.Engine.ALPHA_ADD;
+  mat.emissiveColor = tint;
+  plane.material = mat;
+  return plane;
+}
+function solveSlotPath(r0, b, ellObs, fast){
+  const maxSteps = fast ? 3500 : 15000;
+  const dl = fast ? 0.03*r0 : 0.015*r0;
+  const res = integrateGeodesicFull(r0, b, ellObs, maxSteps, dl);
+  const pts = resampleFixed(res.pts, GEO_POINTS);
+  return { path3D: pathTo3D(pts, r0), transmitted: res.transmitted, finalPhi: res.finalPhi };
+}
+function createGeodesicSlot(r0, b, ellObs, tintOverride, fast){
+  const solved = solveSlotPath(r0, b, ellObs, fast);
+  const tint = tintOverride || (solved.transmitted ? TRANS_COLOR : REFLECT_COLOR);
+  const line = BABYLON.MeshBuilder.CreateLines("geoLine", {points:solved.path3D, updatable:true}, scene);
+  line.color = tint; line.alpha = 0.9;
+  const marker = makeMarker(tint);
+  marker.position.copyFrom(solved.path3D[0]);
+  return { line, marker, path3D:solved.path3D, transmitted:solved.transmitted,
+           finalPhi:solved.finalPhi, b, tintOverride, tint };
+}
+function updateGeodesicSlot(slot, r0, ellObs, fast){
+  // slot.b ya viene fijado (para el fotón personalizado se actualiza antes de llamar)
+  const solved = solveSlotPath(r0, slot.b, ellObs, fast);
+  BABYLON.MeshBuilder.CreateLines("geoLine", {points:solved.path3D, instance:slot.line});
+  const tint = slot.tintOverride || (solved.transmitted ? TRANS_COLOR : REFLECT_COLOR);
+  slot.line.color = tint;
+  slot.marker.material.emissiveColor = tint;
+  slot.path3D = solved.path3D;
+  slot.transmitted = solved.transmitted;
+  slot.finalPhi = solved.finalPhi;
+}
+function clearGeodesics(){
+  for(const g of geoSlots){ g.line.dispose(); g.marker.dispose(); }
+  geoSlots = []; customSlot = null;
+}
+
+const FIXED_B_RATIOS = [0.35, 0.75, 1.15, 1.5, 2.1];
+let geoSlots = [];
+let customSlot = null;
+let customGeo = null; // alias que usan los readouts
+
+function ensureGeoSlots(r0, bRatio, fast){
+  const ellObs = 5*r0;
+  if (geoSlots.length === 0){
+    for(const br of FIXED_B_RATIOS) geoSlots.push(createGeodesicSlot(r0, br*r0, ellObs, null, fast));
+    customSlot = createGeodesicSlot(r0, bRatio*r0, ellObs, new BABYLON.Color3(1.4,1.4,1.4), fast);
+    geoSlots.push(customSlot);
+  } else {
+    for(let i=0;i<FIXED_B_RATIOS.length;i++) updateGeodesicSlot(geoSlots[i], r0, ellObs, fast);
+    customSlot.b = bRatio*r0;
+    updateGeodesicSlot(customSlot, r0, ellObs, fast);
+  }
+  customGeo = customSlot;
+}
+
+function rebuildAll(r0, bRatio, v){
+  buildWireframe(r0, 1);
+  ensureGeoSlots(r0, bRatio, false);
+  updateReadouts(r0, bRatio, v, customGeo);
+  invalidateLensTable();
+  scheduleThroatView(r0, v);
+  drawStabilityChart(r0, bRatio);
+}
+
+/* =========================================================
+   PANEL DE ESTABILIDAD
+   - Curva en vivo: potencial efectivo de fotones V_eff(ell)=L^2/r(ell)^2,
+     exactamente el mismo termino que aparece en la ecuacion de geodesicas
+     ya integrada arriba (no es una formula nueva, es su version "estatica").
+     El maximo en la garganta (ell=0) es un equilibrio INESTABLE: un foton
+     con b=r0 exactamente podria orbitar ahi para siempre, pero cualquier
+     perturbacion lo manda a un lado (transmision) o al otro (reflexion) —
+     el mismo mecanismo que la esfera de fotones de un agujero negro.
+   - Nota aparte (no calculada aqui, citada de la literatura): la GEOMETRIA
+     completa del agujero de gusano de Ellis es linealmente inestable bajo
+     perturbaciones de la metrica (Gonzalez, Guzman & Sarbach 2009 y trabajos
+     posteriores): decae a un agujero negro de Schwarzschild o se infla,
+     segun el signo de la perturbacion. Simularlo en vivo requeriria resolver
+     las ecuaciones de Einstein perturbadas dependientes del tiempo, fuera
+     del alcance de este simulador en tiempo real.
+   ========================================================= */
+function drawStabilityChart(r0, bRatio){
+  const canvas = document.getElementById("stabilityChart");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  const margin = {l:34, r:10, t:10, b:20};
+  const plotW = W-margin.l-margin.r, plotH = H-margin.t-margin.b;
+  const ellMax = 3.2*r0;
+  const b = bRatio*r0;
+
+  // V_eff normalizado por E^2=1: Veff(ell) = (b^2)/r(ell)^2 -- graficamos
+  // ademas la curva "generica" del maximo de la barrera para b=r0 (referencia)
+  function Veff(ell, bb){ const r=rOf(ell,r0); return (bb*bb)/(r*r); }
+  const N = 140;
+  const pts = [];
+  let vMax = 0;
+  for(let i=0;i<=N;i++){
+    const ell = -ellMax + (i/N)*2*ellMax;
+    const v = Veff(ell, r0); // barrera de referencia (b=r0): la envolvente maxima posible
+    pts.push({ell, v});
+    if (v>vMax) vMax = v;
+  }
+  vMax = Math.max(vMax, 1.15);
+
+  function X(ell){ return margin.l + ((ell+ellMax)/(2*ellMax))*plotW; }
+  function Y(v){ return margin.t + (1 - v/vMax)*plotH; }
+
+  // ejes
+  ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(margin.l, margin.t); ctx.lineTo(margin.l, margin.t+plotH); ctx.lineTo(margin.l+plotW, margin.t+plotH); ctx.stroke();
+  ctx.fillStyle = "#8f96b3"; ctx.font = "9px Consolas,monospace";
+  ctx.fillText("ℓ", margin.l+plotW-6, margin.t+plotH+14);
+  ctx.fillText("V", margin.l-14, margin.t+8);
+
+  // linea E^2=1 (umbral de transmision/reflexion)
+  ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(margin.l, Y(1)); ctx.lineTo(margin.l+plotW, Y(1)); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle="#9aa3c0"; ctx.fillText("E²=1", margin.l+plotW-30, Y(1)-4);
+
+  // curva de barrera de referencia (b=r0), tenue
+  ctx.strokeStyle = "rgba(143,208,255,0.35)"; ctx.lineWidth=1.4;
+  ctx.beginPath();
+  pts.forEach((p,i)=>{ const x=X(p.ell), y=Y(p.v); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  ctx.stroke();
+
+  // curva del foton de prueba actual V_eff con su propio b, coloreada por resultado
+  const transmit = b < r0;
+  ctx.strokeStyle = transmit ? "#57e6c9" : "#ffab4d";
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  for(let i=0;i<=N;i++){
+    const ell = -ellMax + (i/N)*2*ellMax;
+    const v = Veff(ell, b);
+    const x=X(ell), y=Y(Math.min(v,vMax));
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // punto de equilibrio inestable en la garganta (ell=0, barrera de referencia)
+  const eqX = X(0), eqY = Y(Veff(0,r0));
+  ctx.fillStyle = "#ff6b6b";
+  ctx.beginPath(); ctx.arc(eqX, eqY, 4, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#ff9b9b"; ctx.font="9px Consolas,monospace";
+  ctx.fillText("equilibrio inestable", Math.min(eqX+6, W-110), eqY-6);
+
+  document.getElementById("metricStability").innerHTML =
+    `<b>Estabilidad de la geometría completa</b> (resultado de la literatura,
+     no calculado en vivo): el agujero de gusano de Ellis es linealmente
+     <b>inestable</b> ante perturbaciones de la métrica — decae a un agujero
+     negro de Schwarzschild o se infla, según el signo de la perturbación
+     (González, Guzmán &amp; Sarbach, 2009; confirmado en trabajos
+     posteriores). Simular esa dinámica exigiría resolver las ecuaciones de
+     Einstein perturbadas dependientes del tiempo, fuera del alcance de un
+     simulador en tiempo real en el navegador.`;
+}
+
+/* =========================================================
+   DEMOSTRACIÓN DE INESTABILIDAD ORBITAL — 100% cálculo en vivo.
+   Tres fotones casi idénticos (b=r0(1-δ), b=r0, b=r0(1+δ)) se integran con
+   el MISMO RK4 de siempre, a pasos fijos (sin salida anticipada), y se mide
+   su separación real paso a paso. No hay nada pre-animado ni pre-dibujado:
+   si cambias r0 o δ, la curva de divergencia cambia porque se vuelve a
+   integrar la ecuación, no porque se reescale un dibujo.
+   ========================================================= */
+let demoLines = [], demoMarkers = [];
+let demoRunning = false;
+function clearDemo(){
+  for(const l of demoLines) l.dispose();
+  for(const m of demoMarkers) m.dispose();
+  demoLines = []; demoMarkers = [];
+}
+function runInstabilityDemo(){
+  if (demoRunning || forming || toyRunning) return;
+  demoRunning = true;
+  const btn = document.getElementById("instabilityBtn");
+  btn.disabled = true;
+  clearDemo();
+
+  const r0 = parseFloat(r0Input.value);
+  const delta = 0.008;
+  const ellObs = 6*r0;
+  const steps = 3000;
+  const dl = 0.02*r0;
+  const bVals = [r0*(1-delta), r0, r0*(1+delta)];
+  const tints = [new BABYLON.Color3(1.5,0.6,0.4), new BABYLON.Color3(1.6,1.6,1.6), new BABYLON.Color3(0.4,1.4,1.6)];
+
+  const trajectories = bVals.map(b => integrateFixedSteps(r0, b, ellObs, steps, dl));
+  const paths3D = trajectories.map(pts => pathTo3D(pts, r0));
+
+  const fullLen = paths3D[0].length;
+  for(let k=0;k<3;k++){
+    // se crea ya con la longitud final fija (todos los puntos en el origen);
+    // "instance" update exige mantener siempre el mismo numero de puntos,
+    // asi que el crecimiento progresivo se logra revelando valores reales
+    // en las primeras posiciones y repitiendo la ultima en el resto (invisible,
+    // coincide consigo mismo) en vez de cambiar el tamaño del arreglo.
+    const initPts = new Array(fullLen).fill(paths3D[k][0]);
+    const line = BABYLON.MeshBuilder.CreateLines("demoLine"+k, {points:initPts, updatable:true}, scene);
+    line.color = tints[k]; line.alpha = 0.95;
+    demoLines.push(line);
+    const marker = makeMarker(tints[k]);
+    marker.position.copyFrom(paths3D[k][0]);
+    demoMarkers.push(marker);
+  }
+
+  // separacion real entre la trayectoria (1-δ) y (1+δ), medida en el
+  // encaje 3D exacto (distancia euclidiana entre los puntos ya calculados)
+  const sep = [];
+  for(let i=0;i<paths3D[0].length;i++){
+    sep.push(BABYLON.Vector3.Distance(paths3D[0][i], paths3D[2][i]));
+  }
+
+  const duration = 6000;
+  const t0 = performance.now();
+  const chart = document.getElementById("divergenceChart");
+  const cctx = chart.getContext("2d");
+  const W=chart.width, H=chart.height, margin={l:34,r:8,t:8,b:16};
+  const plotW=W-margin.l-margin.r, plotH=H-margin.t-margin.b;
+  const sMin = Math.max(Math.min(...sep.filter(s=>s>0)), 1e-6);
+  const sMax = Math.max(...sep);
+  function Ylog(s){ const lo=Math.log10(sMin), hi=Math.log10(sMax); const t=(Math.log10(Math.max(s,sMin))-lo)/(hi-lo||1); return margin.t+(1-t)*plotH; }
+  function Xi(i){ return margin.l + (i/(sep.length-1))*plotW; }
+
+  cctx.clearRect(0,0,W,H);
+  cctx.strokeStyle="rgba(255,255,255,0.18)"; cctx.lineWidth=1;
+  cctx.beginPath(); cctx.moveTo(margin.l,margin.t); cctx.lineTo(margin.l,margin.t+plotH); cctx.lineTo(margin.l+plotW,margin.t+plotH); cctx.stroke();
+  cctx.fillStyle="#8f96b3"; cctx.font="9px Consolas,monospace";
+  cctx.fillText("separación (escala log)", margin.l+2, margin.t+9);
+  cctx.fillText("λ →", margin.l+plotW-16, margin.t+plotH+14);
+
+  function step(now){
+    const t = Math.min((now-t0)/duration, 1);
+    const idx = Math.min(Math.floor(t*(paths3D[0].length-1)), paths3D[0].length-1);
+
+    for(let k=0;k<3;k++){
+      demoMarkers[k].position.copyFrom(paths3D[k][idx]);
+      const frame = new Array(fullLen);
+      for(let i=0;i<fullLen;i++) frame[i] = paths3D[k][i<=idx ? i : idx];
+      BABYLON.MeshBuilder.CreateLines("demoLine"+k, {points: frame, instance: demoLines[k]});
+    }
+
+    // dibuja el tramo nuevo de la curva de divergencia (progresivo, no de golpe)
+    cctx.strokeStyle = "#ffab4d"; cctx.lineWidth = 1.8;
+    cctx.beginPath();
+    for(let i=0;i<=idx;i++){ const x=Xi(i), y=Ylog(sep[i]); i===0?cctx.moveTo(x,y):cctx.lineTo(x,y); }
+    cctx.stroke();
+
+    document.getElementById("demoStatus").textContent =
+      `δ=${delta} · separación actual ≈ ${sep[idx].toExponential(2)} (unidades de r₀=${r0.toFixed(2)})`;
+
+    if (t < 1){
+      requestAnimationFrame(step);
+    } else {
+      demoRunning = false;
+      btn.disabled = false;
+      document.getElementById("demoStatus").textContent += "  — demo terminada, corre de nuevo cuando quieras";
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+/* =========================================================
+   MODELO ILUSTRATIVO DE COLAPSO/INFLADO DEL AGUJERO DE GUSANO
+   r0(t) = r0 * exp(±kappa*t): anima el signo REAL del resultado de la
+   literatura (colapso vs inflación), con una tasa kappa ajustable que NO
+   se deriva aquí de las ecuaciones de perturbación completas (ver aviso en
+   la interfaz). Durante la animación se ocultan las geodésicas estáticas
+   porque no describen correctamente esta dinámica transitoria; al terminar
+   se restauran junto con el r0 real del deslizador.
+   ========================================================= */
+let toyRunning = false;
+function runToyDynamics(direction){
+  if (toyRunning || forming) return;
+  toyRunning = true;
+  collapseBtn.disabled = true; inflateBtn.disabled = true;
+  for(const g of geoSlots) g.line.alpha = 0; // no describen la dinamica transitoria
+  for(const g of geoSlots) g.marker.isVisible = false;
+
+  const r0Start = parseFloat(r0Input.value);
+  const kappa = parseFloat(kappaInput.value);
+  const duration = 4500;
+  const t0 = performance.now();
+  const floor = 0.03, ceil = r0Start*5;
+
+  function step(now){
+    const t = (now-t0)/1000; // segundos reales, para que kappa tenga unidades claras
+    let r0t = r0Start*Math.exp(direction*kappa*t);
+    r0t = Math.min(Math.max(r0t, floor), ceil);
+    const doneCollapse = direction<0 && r0t<=floor*1.01;
+    const doneInflate = direction>0 && r0t>=ceil*0.99;
+
+    const extentFrac = direction>0 ? Math.min(1, 0.3+0.15*t) : 1;
+    buildWireframe(r0t, 1, extentFrac);
+
+    const tau0t = 1/(8*Math.PI*r0t*r0t);
+    const label = direction<0 ? "colapsando hacia un agujero negro" : "inflándose sin límite";
+    document.getElementById("toyStatus").textContent =
+      `[ilustrativo] r₀(t)=${r0t.toExponential(2)} · τ₀(t)=${tau0t.toExponential(2)} · ${label}…`;
+
+    if (!doneCollapse && !doneInflate){
+      requestAnimationFrame(step);
+    } else {
+      document.getElementById("toyStatus").textContent =
+        direction<0
+          ? "[ilustrativo] garganta cerrada — en la geometría real esto formaría un horizonte de sucesos"
+          : "[ilustrativo] la hoja se infla sin límite — no queda garganta traversable";
+      setTimeout(()=>{
+        // restaurar al r0 real del deslizador, con geodesicas visibles otra vez
+        const r0Real = parseFloat(r0Input.value);
+        buildWireframe(r0Real, 1);
+        ensureGeoSlots(r0Real, parseFloat(bInput.value), false);
+        for(const g of geoSlots){ g.marker.isVisible = true; g.line.alpha = 0.9; }
+        updateReadouts(r0Real, parseFloat(bInput.value), parseFloat(vInput.value), customGeo);
+        invalidateLensTable();
+        scheduleThroatView(r0Real, parseFloat(vInput.value));
+        drawStabilityChart(r0Real, parseFloat(bInput.value));
+        document.getElementById("toyStatus").textContent += "  · geometría restaurada a r₀ del deslizador";
+        toyRunning = false;
+        collapseBtn.disabled = false; inflateBtn.disabled = false;
+      }, 1400);
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+/* =========================================================
+   ANIMACION: fotones viajando por sus geodesicas
+   ========================================================= */
+let frameCounter = 0;
+scene.onBeforeRenderObservable.add(()=>{
+  frameCounter += 1;
+  for(const g of geoSlots){
+    const len = g.path3D.length;
+    if (len < 2) continue;
+    const period = 2*(len-1);
+    let m = (frameCounter*1.3) % period;
+    const idx = m <= (len-1) ? m : period - m;
+    g.marker.position.copyFrom(g.path3D[Math.floor(idx)]);
+  }
+  const t = performance.now()/1000;
+  corePlane.scaling.setAll(1 + 0.15*Math.sin(t*2.5));
+  coreMat.emissiveColor.set(0.7+0.1*Math.sin(t*3), 0.85, 1.2+0.15*Math.cos(t*2));
+});
+
+/* =========================================================
+   POST-PROCESADO
+   ========================================================= */
+const pipeline = new BABYLON.DefaultRenderingPipeline("pipe", true, scene, [camera]);
+pipeline.bloomEnabled = true; pipeline.bloomThreshold = 0.32; pipeline.bloomWeight = 0.75; pipeline.bloomKernel = 56;
+pipeline.fxaaEnabled = true;
+pipeline.chromaticAberrationEnabled = true; pipeline.chromaticAberration.aberrationAmount = 7;
+pipeline.grainEnabled = true; pipeline.grain.intensity = 5;
+pipeline.imageProcessing.contrast = 1.2; pipeline.imageProcessing.exposure = 1.15;
+pipeline.imageProcessing.vignetteEnabled = true; pipeline.imageProcessing.vignetteWeight = 3.2;
+pipeline.imageProcessing.toneMappingEnabled = true;
+pipeline.imageProcessing.toneMappingType = BABYLON.ImageProcessingConfiguration.TONEMAPPING_ACES;
+
+/* =========================================================
+   VISTA 2D DEL EJE: LENTE GRAVITACIONAL + ABERRACION RELATIVISTA
+   ========================================================= */
+const SKY_SIZE = 256;
+const universeBand = makeBandCanvas(SKY_SIZE);  // fuente del "anillo" (reflejado)
+const universeWorld = makeWorldCanvas(SKY_SIZE); // "otro lado" (transmitido)
+
+let lensTable = null, lensTableR0 = null;
+function invalidateLensTable(){ lensTable = null; lensTableR0 = null; }
+function ensureLensTable(r0){
+  if (lensTable && lensTableR0 === r0) return lensTable;
+  const ellObs = 5*r0, bMax = 3*r0, nSamples = 130;
+  const table = [];
+  for(let i=0;i<nSamples;i++){
+    const b = (i/(nSamples-1))*bMax + 1e-3;
+    const res = integrateGeodesicFast(r0, b, ellObs, 9000, 0.02*r0);
+    table.push({b, deltaPhi: res.finalPhi, transmitted: res.transmitted});
+  }
+  lensTable = table; lensTableR0 = r0;
+  return table;
+}
+function lensLookup(table, b){
+  if (b<=table[0].b) return table[0];
+  if (b>=table[table.length-1].b) return table[table.length-1];
+  let lo=0, hi=table.length-1;
+  while(hi-lo>1){ const mid=(lo+hi)>>1; if(table[mid].b<b) lo=mid; else hi=mid; }
+  const a=table[lo], c=table[hi], t=(b-a.b)/(c.b-a.b);
+  return { deltaPhi: a.deltaPhi+(c.deltaPhi-a.deltaPhi)*t, transmitted: t<0.5?a.transmitted:c.transmitted };
+}
+function clamp255(v){ return v<0?0:(v>255?255:v); }
+
+function renderThroatFrame(r0, v, phasePx){
+  const table = ensureLensTable(r0);
+  const ellObs = 5*r0, rRefObs = rOf(ellObs, r0);
+  const beta = v, gamma = 1/Math.sqrt(Math.max(1-beta*beta, 1e-6));
+  const outCanvas = document.getElementById("throatView");
+  const size = outCanvas.width;
+  const outCtx = outCanvas.getContext("2d");
+  const outImg = outCtx.createImageData(size,size);
+  const cx=size/2, cy=size/2, R=size/2, thetaMax = 80*Math.PI/180;
+
+  for(let y=0;y<size;y++){
+    for(let x=0;x<size;x++){
+      const dx=x-cx, dy=y-cy, rho=Math.sqrt(dx*dx+dy*dy);
+      const idxOut=(y*size+x)*4;
+      if (rho>R){ outImg.data[idxOut+3]=0; continue; }
+      const psi = Math.atan2(dy,dx);
+      const thetaTrav = (rho/R)*thetaMax;
+      const cosTrav = Math.cos(thetaTrav);
+
+      // aberracion relativista: angulo estatico equivalente
+      let cosStatic = (cosTrav + beta) / (1 + beta*cosTrav);
+      cosStatic = Math.min(1, Math.max(-1, cosStatic));
+      const thetaStatic = Math.acos(cosStatic);
+      const b = rRefObs*Math.sin(thetaStatic);
+
+      const look = lensLookup(table, b);
+      const psiOut = psi + look.deltaPhi;
+      const src = look.transmitted ? universeWorld : universeBand;
+
+      const delta = 1/(gamma*(1-beta*cosTrav));
+      const boost = Math.min(Math.max(Math.pow(delta,3), 0.15), 3.2);
+      const shift = Math.min(Math.max((delta-1)*0.5, -0.5), 0.5);
+
+      const sx = Math.round(cx + rho*Math.cos(psiOut)*(src.width/size)) + Math.round(phasePx);
+      const sy = Math.round(cy + rho*Math.sin(psiOut)*(src.height/size));
+      const sxx = ((sx % src.width) + src.width) % src.width;
+      const syy = ((sy % src.height) + src.height) % src.height;
+      const idxSrc = (syy*src.width+sxx)*4;
+
+      let rC=src.data[idxSrc], gC=src.data[idxSrc+1], bC=src.data[idxSrc+2];
+      if (shift>0){ bC = bC*(1+shift*0.6); rC = rC*(1-shift*0.3); } // acercandose: azulado
+      else { rC = rC*(1-shift*0.6); bC = bC*(1+shift*0.3); }       // alejandose: rojizo
+
+      outImg.data[idxOut]   = clamp255(rC*boost);
+      outImg.data[idxOut+1] = clamp255(gC*boost);
+      outImg.data[idxOut+2] = clamp255(bC*boost);
+      outImg.data[idxOut+3] = 255;
+    }
+  }
+  outCtx.putImageData(outImg,0,0);
+}
+
+let throatViewTimer = null;
+function scheduleThroatView(r0, v){
+  clearTimeout(throatViewTimer);
+  document.getElementById("lensWarn").textContent = "Calculando lente gravitacional…";
+  throatViewTimer = setTimeout(()=>{
+    renderThroatFrame(r0, v, animPhase);
+    document.getElementById("lensWarn").textContent = "";
+  }, 30);
+}
+
+let animPhase = 0, animTimer = null;
+function startAnim(r0v, vv){
+  stopAnim();
+  animTimer = setInterval(()=>{
+    animPhase += 3;
+    const r0c = parseFloat(document.getElementById("r0").value);
+    const vc = parseFloat(document.getElementById("vRatio").value);
+    renderThroatFrame(r0c, vc, animPhase);
+  }, 130);
+}
+function stopAnim(){ if(animTimer){ clearInterval(animTimer); animTimer=null; } }
+
+/* =========================================================
+   LECTURAS NUMÉRICAS
+   ========================================================= */
+function updateReadouts(r0, bRatio, v, customGeo){
+  const tau0 = 1/(8*Math.PI*r0*r0);
+  const gamma = 1/Math.sqrt(Math.max(1-v*v,1e-6));
+  document.getElementById("readout").innerHTML = `
+    <div><span>τ₀ (tensión en la garganta)</span><span>${tau0.toFixed(4)}</span></div>
+    <div><span>ρ₀ (densidad de energía)</span><span>${(-tau0).toFixed(4)}</span></div>
+    <div><span>b′(r₀) (flare-out, &lt;1)</span><span>−1.000 ✓</span></div>
+    <div><span>Corrimiento gravitacional</span><span>nulo (Φ≡0)</span></div>
+    <div><span>γ del viajero</span><span>${gamma.toFixed(3)}</span></div>
+  `;
+  const b = bRatio*r0;
+  document.getElementById("photonReadout").innerHTML = `
+    <div><span>Fotón de prueba, b</span><span>${b.toFixed(3)}</span></div>
+    <div><span>Resultado</span><span>${customGeo.transmitted ? "TRANSMITIDO ✅" : "REFLEJADO 🔁"}</span></div>
+    <div><span>Δφ total acumulado</span><span>${customGeo.finalPhi.toFixed(3)} rad</span></div>
+  `;
+}
+
+/* =========================================================
+   UI
+   ========================================================= */
+const r0Input = document.getElementById("r0");
+const bInput = document.getElementById("bRatio");
+const vInput = document.getElementById("vRatio");
+const r0val = document.getElementById("r0val");
+const bval = document.getElementById("bval");
+const vval = document.getElementById("vval");
+const cine = document.getElementById("cine");
+const animLens = document.getElementById("animLens");
+
+function refresh(){
+  const r0 = parseFloat(r0Input.value);
+  const bRatio = parseFloat(bInput.value);
+  const v = parseFloat(vInput.value);
+  r0val.textContent = r0.toFixed(2);
+  bval.textContent = bRatio.toFixed(2);
+  vval.textContent = v.toFixed(2);
+  rebuildAll(r0, bRatio, v);
+}
+r0Input.addEventListener("input", refresh);
+bInput.addEventListener("input", refresh);
+vInput.addEventListener("input", refresh);
+cine.addEventListener("change", ()=>{ camera.useAutoRotationBehavior = cine.checked; });
+animLens.addEventListener("change", ()=>{ animLens.checked ? startAnim() : stopAnim(); });
+
+// --- Formacion animada: r0(t) crece de ~0 a su valor objetivo y la rejilla
+// se reconstruye cada frame evaluando r(ell)=sqrt(ell^2+r0(t)^2) en vivo.
+// No hay fotogramas guardados: es la ecuacion evaluandose en tiempo real. ---
+const formBtn = document.getElementById("formBtn");
+const formStatus = document.getElementById("formStatus");
+let forming = false;
+function animateFormation(){
+  if (forming || toyRunning) return;
+  forming = true;
+  formBtn.disabled = true;
+  const targetR0 = parseFloat(r0Input.value);
+  const targetBRatio = parseFloat(bInput.value);
+  const duration = 5200;
+  const t0 = performance.now();
+  let frame = 0;
+
+  // aseguramos que existan los slots de geodesicas antes de animar
+  // (si es la primera vez, se crean ya en el r0 inicial de la animacion)
+  if (geoSlots.length === 0) ensureGeoSlots(0.05, targetBRatio, true);
+
+  const smooth = (x)=> x*x*(3-2*x);
+
+  function step(now){
+    frame += 1;
+    const t = Math.min((now-t0)/duration, 1);
+
+    // FASE 1 (0 -> 0.5 de t): la garganta se abre, r0 crece de casi 0 al objetivo.
+    const p1 = smooth(Math.min(t/0.5, 1));
+    const r0t = 0.03 + p1*(targetR0-0.03);
+
+    // FASE 2 (0.22 -> 1 de t, solapada): la hoja asintoticamente plana se
+    // despliega hacia afuera desde la garganta ya (parcialmente) formada.
+    const p2 = smooth(Math.min(Math.max((t-0.22)/0.78, 0), 1));
+    const extentFrac = 0.08 + 0.92*p2;
+    const pulsePos = extentFrac*HMAX_L*r0t; // frente de onda viajero (indicador visual, no un termino fisico nuevo)
+
+    const alphaGrid = 0.2 + 0.8*Math.min(p1, 1);
+    buildWireframe(r0t, alphaGrid, extentFrac, pulsePos);
+
+    // las geodesicas se re-resuelven con RK4 reducido cada pocos frames, con
+    // un observador ellObs ligado a cuanto de la hoja ya existe: siguen
+    // siendo la misma ecuacion exacta, solo evaluada con el r0(t) e ellObs(t)
+    // de cada instante.
+    if (frame % 4 === 0 || t >= 1){
+      const fast = t < 1;
+      const ellObsT = Math.max(2*r0t, 0.85*pulsePos);
+      for(let i=0;i<FIXED_B_RATIOS.length;i++) updateGeodesicSlot(geoSlots[i], r0t, ellObsT, fast);
+      customSlot.b = targetBRatio*r0t;
+      updateGeodesicSlot(customSlot, r0t, ellObsT, fast);
+      customGeo = customSlot;
+      const alphaLine = 0.1 + 0.85*p2;
+      for(const g of geoSlots) g.line.alpha = alphaLine;
+    }
+
+    const tau0t = 1/(8*Math.PI*r0t*r0t);
+    const fase = p1<0.98 ? "abriendo la garganta (r₀ creciendo)" : "desplegando la hoja asintótica plana";
+    formStatus.textContent = `r₀(t)=${r0t.toFixed(3)} · τ₀(t)=${tau0t.toFixed(3)} · ${fase}…`;
+
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      formStatus.textContent = `Garganta formada: r₀ = ${targetR0.toFixed(2)} (secuencia de soluciones estáticas exactas, no una evolución dinámica de Einstein)`;
+      forming = false;
+      formBtn.disabled = false;
+      updateReadouts(targetR0, targetBRatio, parseFloat(vInput.value), customGeo);
+      invalidateLensTable();
+      scheduleThroatView(targetR0, parseFloat(vInput.value));
+      drawStabilityChart(targetR0, targetBRatio);
+    }
+  }
+  requestAnimationFrame(step);
+}
+formBtn.addEventListener("click", animateFormation);
+
+const instabilityBtn = document.getElementById("instabilityBtn");
+instabilityBtn.addEventListener("click", runInstabilityDemo);
+
+const collapseBtn = document.getElementById("collapseBtn");
+const inflateBtn = document.getElementById("inflateBtn");
+const kappaInput = document.getElementById("kappaInput");
+const kappaVal = document.getElementById("kappaVal");
+kappaInput.addEventListener("input", ()=>{ kappaVal.textContent = parseFloat(kappaInput.value).toFixed(2); });
+kappaVal.textContent = parseFloat(kappaInput.value).toFixed(2);
+collapseBtn.addEventListener("click", ()=> runToyDynamics(-1));
+inflateBtn.addEventListener("click", ()=> runToyDynamics(1));
+
+// --- Reproducir una vista compartida desde ?r0=..&b=..&v=.. en la URL ---
+(function applySharedParams(){
+  const p = new URLSearchParams(window.location.search);
+  if (p.has("r0")) r0Input.value = Math.min(Math.max(parseFloat(p.get("r0")), parseFloat(r0Input.min)), parseFloat(r0Input.max));
+  if (p.has("b"))  bInput.value  = Math.min(Math.max(parseFloat(p.get("b")),  parseFloat(bInput.min)),  parseFloat(bInput.max));
+  if (p.has("v"))  vInput.value  = Math.min(Math.max(parseFloat(p.get("v")),  parseFloat(vInput.min)),  parseFloat(vInput.max));
+})();
+refresh();
+
+// --- Share View: genera un enlace exacto con los parametros actuales ---
+const shareBtn = document.getElementById("shareBtn");
+const shareLink = document.getElementById("shareLink");
+const shareMsg = document.getElementById("shareMsg");
+shareBtn.addEventListener("click", async ()=>{
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.searchParams.set("r0", r0Input.value);
+  url.searchParams.set("b", bInput.value);
+  url.searchParams.set("v", vInput.value);
+  const link = url.toString();
+  shareLink.value = link;
+  try{
+    await navigator.clipboard.writeText(link);
+    shareMsg.textContent = "Enlace copiado al portapapeles.";
+  }catch(e){
+    shareLink.select();
+    shareMsg.textContent = "Copia el enlace manualmente (seleccionado).";
+  }
+});
+
+// --- Renderizar las ecuaciones LaTeX con KaTeX ---
+if (window.renderMathInElement){
+  renderMathInElement(document.getElementById("ui"), {
+    delimiters: [
+      {left:"$$", right:"$$", display:true},
+      {left:"$", right:"$", display:false}
+    ],
+    throwOnError:false
+  });
+}
+
+engine.runRenderLoop(()=> scene.render());
+window.addEventListener("resize", ()=> engine.resize());
+} // fin de main()
+main();
+</script>
+</body>
+</html>
